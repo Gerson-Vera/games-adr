@@ -116,6 +116,24 @@ const USERS = [
     displayName: "Jugador Dos",
     role: "PLAYER" as const,
   },
+  ...[
+    "ysara",
+    "mmesias",
+    "fferrari",
+    "cquicano",
+    "ejanampa",
+    "lcanales",
+    "smachado",
+    "janicama",
+    "bloayza",
+    "jescalaya",
+  ].map((username) => ({
+    email: `${username}@correo.com`,
+    username,
+    password: "admin123",
+    displayName: username.charAt(0).toUpperCase() + username.slice(1),
+    role: "PLAYER" as const,
+  })),
 ];
 
 async function main() {
