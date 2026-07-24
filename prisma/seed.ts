@@ -150,7 +150,6 @@ async function main() {
         username: u.username,
         password: hash,
         role: u.role,
-        twoFactorVerifiedAt: new Date(), // gracia 2FA para poder entrar sin email
       },
     });
     await prisma.player.upsert({

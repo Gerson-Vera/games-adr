@@ -13,7 +13,6 @@ export const authOptions: AuthOptions = {
       credentials: {
         email: { label: "Email", type: "text" },
         password: { label: "Contraseña", type: "password" },
-        twoFactorCode: { label: "Código 2FA", type: "text" },
       },
       async authorize(credentials) {
         try {
@@ -34,77 +33,14 @@ export const authOptions: AuthOptions = {
           );
           if (!isValid) throw new Error("Contraseña incorrecta");
 
-          const buildResult = () =>
-            ({
-              id: user.id,
-              email: user.email,
-              name: user.username,
-              image: user.avatar ?? null,
-              role: user.role,
-              playerId: user.player?.id ?? null,
-            } as any);
-
-          // En desarrollo no se requiere 2FA
-          if (process.env.NODE_ENV === "development") {
-            return buildResult();
-          }
-
-          const GRACE_MS = 60 * 60 * 1000;
-          const inGracePeriod =
-            user.twoFactorVerifiedAt != null &&
-            Date.now() - user.twoFactorVerifiedAt.getTime() < GRACE_MS;
-
-          if (inGracePeriod) {
-            await prisma.user.update({
-              where: { id: user.id },
-              data: { twoFactorVerifiedAt: new Date() },
-            });
-            return buildResult();
-          }
-
-          if (!credentials?.twoFactorCode)
-            throw new Error(
-              "Se requiere el código de verificación de dos factores"
-            );
-
-          if (!user.twoFactorCode || !user.twoFactorCodeExpiry)
-            throw new Error(
-              "Código no solicitado. Inicia el proceso de login nuevamente."
-            );
-
-          if (new Date() > user.twoFactorCodeExpiry)
-            throw new Error("El código ha expirado. Solicita uno nuevo.");
-
-          if ((user.twoFactorAttempts ?? 0) >= 5)
-            throw new Error(
-              "Demasiados intentos fallidos. Solicita un nuevo código."
-            );
-
-          if (credentials.twoFactorCode !== user.twoFactorCode) {
-            const newAttempts = (user.twoFactorAttempts ?? 0) + 1;
-            await prisma.user.update({
-              where: { id: user.id },
-              data: { twoFactorAttempts: newAttempts },
-            });
-            const remaining = 5 - newAttempts;
-            throw new Error(
-              remaining > 0
-                ? `Código incorrecto. Te quedan ${remaining} intento(s).`
-                : "Demasiados intentos fallidos. Solicita un nuevo código."
-            );
-          }
-
-          await prisma.user.update({
-            where: { id: user.id },
-            data: {
-              twoFactorCode: null,
-              twoFactorCodeExpiry: null,
-              twoFactorAttempts: 0,
-              twoFactorVerifiedAt: new Date(),
-            },
-          });
-
-          return buildResult();
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.username,
+            image: user.avatar ?? null,
+            role: user.role,
+            playerId: user.player?.id ?? null,
+          } as any;
         } catch (error) {
           console.error("[authorize]", error);
           throw error;
@@ -145,19 +81,6 @@ export const authOptions: AuthOptions = {
         (session.user as any).username = (token as any).username ?? token.name;
       }
       return session;
-    },
-  },
-  events: {
-    async signOut(message: any) {
-      const id = message?.token?.id;
-      if (id) {
-        await prisma.user
-          .update({
-            where: { id },
-            data: { twoFactorVerifiedAt: null },
-          })
-          .catch(() => {});
-      }
     },
   },
   secret: process.env.AUTH_SECRET,

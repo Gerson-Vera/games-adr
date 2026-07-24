@@ -4,7 +4,6 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import prisma from "@/app/lib/prisma";
-import { sendTwoFactorEmail } from "@/app/lib/email";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -12,12 +11,6 @@ export type ActionState<T = undefined> = {
   success: boolean;
   error?: string;
   data?: T;
-} | null;
-
-export type Step1State = {
-  success: boolean;
-  requiresTwoFactor?: boolean;
-  error?: string;
 } | null;
 
 // ─── Registro ────────────────────────────────────────────────────────────────
@@ -95,69 +88,4 @@ export async function registerUser(
   }
 
   redirect("/auth/log?registered=true");
-}
-
-// ─── Solicitud de código 2FA ──────────────────────────────────────────────────
-
-const step1Schema = z.object({
-  email: z.string().email("Email inválido"),
-  password: z.string().min(1, "Contraseña requerida"),
-});
-
-export async function requestTwoFactor(
-  _prev: Step1State,
-  formData: FormData
-): Promise<Step1State> {
-  const parsed = step1Schema.safeParse({
-    email: formData.get("email"),
-    password: formData.get("password"),
-  });
-
-  if (!parsed.success) {
-    return { success: false, error: parsed.error.issues[0].message };
-  }
-
-  const { email, password } = parsed.data;
-
-  try {
-    const user = await prisma.user.findUnique({ where: { email } });
-
-    if (!user || !user.isActive) {
-      return { success: false, error: "Credenciales inválidas" };
-    }
-
-    const isValid = await bcrypt.compare(password, user.password);
-    if (!isValid) {
-      return { success: false, error: "Credenciales inválidas" };
-    }
-
-    // En desarrollo no se requiere 2FA
-    if (process.env.NODE_ENV === "development") {
-      return { success: true, requiresTwoFactor: false };
-    }
-
-    const GRACE_MS = 60 * 60 * 1000;
-    const inGracePeriod =
-      user.twoFactorVerifiedAt != null &&
-      Date.now() - user.twoFactorVerifiedAt.getTime() < GRACE_MS;
-
-    if (inGracePeriod) {
-      return { success: true, requiresTwoFactor: false };
-    }
-
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiry = new Date(Date.now() + 10 * 60 * 1000);
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { twoFactorCode: code, twoFactorCodeExpiry: expiry, twoFactorAttempts: 0 },
-    });
-
-    await sendTwoFactorEmail(email, code, user.username ?? email);
-
-    return { success: true, requiresTwoFactor: true };
-  } catch (error) {
-    console.error("[requestTwoFactor]", error);
-    return { success: false, error: "Error del servidor. Intenta de nuevo." };
-  }
 }

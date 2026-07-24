@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { LoginForm } from "./_components/LoginForm";
 
 export const metadata: Metadata = {
@@ -33,7 +34,9 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="bg-zinc-900/70 backdrop-blur-xl border border-zinc-800 rounded-2xl p-8 shadow-2xl shadow-black/50">
-          <LoginForm />
+          <Suspense fallback={null}>
+            <LoginForm />
+          </Suspense>
         </div>
 
         <p className="text-center text-zinc-600 text-xs mt-6">
